@@ -8,14 +8,12 @@ const MONGO_URI = process.env.MONGO_URI;
 const CLIENT_URL = process.env.CLIENT_URL || "https://quotation-frontend.pages.dev";
 const ADMIN_USER = process.env.ADMIN_USER || "admin";
 const ADMIN_PASS = process.env.ADMIN_PASS || "changeme";
-// Simple secret for signing tokens — set this in Render env vars
-const TOKEN_SECRET = process.env.TOKEN_SECRET || "supersecretkey123";
 
 const app = express();
 app.use(cors({ origin: CLIENT_URL }));
 app.use(express.json({ limit: "5mb" }));
 
-// --- DB connection ----------------------------------------------------------
+// --- DB ---------------------------------------------------------------------
 let db;
 const client = new MongoClient(MONGO_URI);
 
@@ -29,13 +27,12 @@ function quotations() {
   return db.collection("quotations");
 }
 
-// --- auth helpers -----------------------------------------------------------
+// --- auth -------------------------------------------------------------------
+let activeToken = null;
+
 function makeToken() {
   return crypto.randomBytes(32).toString("hex");
 }
-
-// In-memory token store (single user, single token at a time)
-let activeToken = null;
 
 function requireAuth(req, res, next) {
   const auth = req.headers.authorization || "";
@@ -45,18 +42,6 @@ function requireAuth(req, res, next) {
   }
   next();
 }
-
-// --- login route (no auth needed) ------------------------------------------
-app.post("/api/login", (req, res) => {
-  const { username, password } = req.body || {};
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
-    activeToken = makeToken();
-    return res.json({ token: activeToken });
-  }
-  res.status(401).json({ error: "Invalid credentials" });
-});
-
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 // --- helpers ----------------------------------------------------------------
 function formatSeq(seq) {
@@ -72,6 +57,18 @@ async function getNextSeq() {
   );
   return result.seq;
 }
+
+// --- public routes ----------------------------------------------------------
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+app.post("/api/login", (req, res) => {
+  const { username, password } = req.body || {};
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    activeToken = makeToken();
+    return res.json({ token: activeToken });
+  }
+  res.status(401).json({ error: "Invalid credentials" });
+});
 
 // --- protected routes -------------------------------------------------------
 app.get("/api/quotations", requireAuth, async (_req, res) => {
